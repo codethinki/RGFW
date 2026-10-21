@@ -3257,6 +3257,11 @@ i32 RGFW_init_ptr(RGFW_info* info) {
 
     RGFW_initKeycodes();
     i32 out = RGFW_initPlatform();
+	if (out < 0) {
+		/* no platform state is left, the next call initializes again */
+		RGFW_setInfo(NULL);
+		return out;
+	}
     RGFW_sendDebugInfo(RGFW_typeInfo, RGFW_infoGlobal, "global context initialized");
 
 	return out;
@@ -3282,7 +3287,9 @@ void RGFW_deinit_ptr(RGFW_info* info) {
 RGFW_window* RGFW_createWindow(const char* name, i32 x, i32 y, i32 w, i32 h, RGFW_windowFlags flags) {
 	RGFW_window* win = (RGFW_window*)RGFW_ALLOC(sizeof(RGFW_window));
 	RGFW_ASSERT(win != NULL);
-    return RGFW_createWindowPtr(name, x, y, w, h, flags, win);
+	RGFW_window* ret = RGFW_createWindowPtr(name, x, y, w, h, flags, win);
+	if (ret == NULL) RGFW_FREE(win);
+	return ret;
 }
 
 void RGFW_window_close(RGFW_window* win) {
@@ -3294,7 +3301,7 @@ void RGFW_window_close(RGFW_window* win) {
 RGFW_window* RGFW_createWindowPtr(const char* name, i32 x, i32 y, i32 w, i32 h, RGFW_windowFlags flags, RGFW_window* win) {
 	RGFW_ASSERT(win != NULL);
 	RGFW_MEMSET(win, 0, sizeof(RGFW_window));
-	if (_RGFW == NULL) RGFW_init();
+	if (_RGFW == NULL && RGFW_init() < 0) return NULL;
     _RGFW->windowCount++;
 
 	/* rect based the requested flags */
@@ -8132,7 +8139,11 @@ i32 RGFW_initPlatform_Wayland(void) {
 
 	if (_RGFW->compositor == NULL) {
 		RGFW_sendDebugInfo(RGFW_typeError, RGFW_errWayland, "Can't find compositor.");
-		return 1;
+		wl_registry_destroy(_RGFW->registry);
+		wl_display_disconnect(_RGFW->wl_display);
+		_RGFW->registry = NULL;
+		_RGFW->wl_display = NULL;
+		return -1;
 	}
 
 	if (_RGFW->wl_cursor_theme == NULL) {

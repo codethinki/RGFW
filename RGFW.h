@@ -422,7 +422,6 @@ typedef ptrdiff_t RGFW_ssize_t;
 		#define RGFW_VK_SURFACE ((RGFW_usingWayland()) ? ("VK_KHR_wayland_surface") : ("VK_KHR_xlib_surface"))
 	#elif defined(RGFW_WAYLAND)
 		#define VK_USE_PLATFORM_WAYLAND_KHR
-		#define VK_USE_PLATFORM_XLIB_KHR
 		#define RGFW_VK_SURFACE "VK_KHR_wayland_surface"
 	#elif defined(RGFW_X11)
 		#define VK_USE_PLATFORM_XLIB_KHR

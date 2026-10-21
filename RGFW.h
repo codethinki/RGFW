@@ -4660,11 +4660,17 @@ VkResult RGFW_window_createSurface_Vulkan(RGFW_window* win, VkInstance instance,
 #if defined(RGFW_WAYLAND)
 
     VkWaylandSurfaceCreateInfoKHR wayland = { VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR, 0, 0, (struct wl_display*) _RGFW->wl_display, (struct wl_surface*) win->src.surface };
-    return vkCreateWaylandSurfaceKHR(instance, &wayland, NULL, surface);
+    /* loaded through the instance: loaders without platform prototypes (e.g. volk) work too */
+    PFN_vkCreateWaylandSurfaceKHR createWaylandSurface = (PFN_vkCreateWaylandSurfaceKHR)vkGetInstanceProcAddr(instance, "vkCreateWaylandSurfaceKHR");
+    if (createWaylandSurface == NULL) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return createWaylandSurface(instance, &wayland, NULL, surface);
 #elif defined(RGFW_WINDOWS)
     VkWin32SurfaceCreateInfoKHR win32 = { VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR, 0, 0, GetModuleHandle(NULL), (HWND)win->src.window };
 
-    return vkCreateWin32SurfaceKHR(instance, &win32, NULL, surface);
+    /* loaded through the instance: loaders without platform prototypes (e.g. volk) work too */
+    PFN_vkCreateWin32SurfaceKHR createWin32Surface = (PFN_vkCreateWin32SurfaceKHR)vkGetInstanceProcAddr(instance, "vkCreateWin32SurfaceKHR");
+    if (createWin32Surface == NULL) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return createWin32Surface(instance, &win32, NULL, surface);
 #elif defined(RGFW_MACOS) && !defined(RGFW_MACOS_X11)
     void* contentView = ((void* (*)(id, SEL))objc_msgSend)((id)win->src.window, sel_getUid("contentView"));
     VkMacOSSurfaceCreateSurfaceMVK macos = { VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK, 0, 0, 0, (void*)contentView };
@@ -4684,9 +4690,14 @@ RGFW_bool RGFW_getPresentationSupport_Vulkan(VkInstance instance, VkPhysicalDevi
 #endif
 #if defined(RGFW_WAYLAND)
 
-    RGFW_bool wlout = vkGetPhysicalDeviceWaylandPresentationSupportKHR(physicalDevice, queueFamilyIndex, _RGFW->wl_display);
+    PFN_vkGetPhysicalDeviceWaylandPresentationSupportKHR getWaylandSupport = (PFN_vkGetPhysicalDeviceWaylandPresentationSupportKHR)vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceWaylandPresentationSupportKHR");
+    if (getWaylandSupport == NULL) return RGFW_FALSE;
+    RGFW_bool wlout = RGFW_BOOL(getWaylandSupport(physicalDevice, queueFamilyIndex, _RGFW->wl_display));
     return wlout;
 #elif defined(RGFW_WINDOWS)
+    PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR getWin32Support = (PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR)vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceWin32PresentationSupportKHR");
+    if (getWin32Support == NULL) return RGFW_FALSE;
+    return RGFW_BOOL(getWin32Support(physicalDevice, queueFamilyIndex));
 #elif defined(RGFW_MACOS) && !defined(RGFW_MACOS_X11)
     return RGFW_FALSE; /* TODO */
 #endif

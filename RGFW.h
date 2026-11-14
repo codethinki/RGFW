@@ -8469,25 +8469,34 @@ u8 RGFW_FUNC(RGFW_rgfwToKeyChar)(u32 key) {
 void RGFW_FUNC(RGFW_pollEvents) (void) {
 	RGFW_resetPrevState();
 
-	/* send buffered requests to compositor */
-	while (wl_display_flush(_RGFW->wl_display) == -1) {
-		/* compositor not responding to new requests */
-		/* so let's dispatch some events so the compositor responds */
-		if (errno == EAGAIN) {
-			if (wl_display_dispatch_pending(_RGFW->wl_display) == -1) {
-				return;
-			}
-		} else {
+	/* no block: wl_display_dispatch() waits for an event when the queue is empty, */
+	/* a render loop then stalls and the pings of the compositor stay unanswered */
+
+	/* empty the queue, then announce the read */
+	while (wl_display_prepare_read(_RGFW->wl_display) != 0) {
+		if (wl_display_dispatch_pending(_RGFW->wl_display) == -1) {
 			return;
 		}
 	}
 
-	/* read the events; if empty this reads from the */
-	/* wayland file descriptor */
-	if (wl_display_dispatch(_RGFW->wl_display) == -1) {
-		return;
+	/* send buffered requests to the compositor, EAGAIN: the rest goes out at the next poll */
+	wl_display_flush(_RGFW->wl_display);
+
+	/* read what the socket holds now, timeout 0 */
+	struct pollfd fd;
+	fd.fd = wl_display_get_fd(_RGFW->wl_display);
+	fd.events = POLLIN;
+	fd.revents = 0;
+
+	if (poll(&fd, 1, 0) > 0 && (fd.revents & POLLIN)) {
+		if (wl_display_read_events(_RGFW->wl_display) == -1) {
+			return;
+		}
+	} else {
+		wl_display_cancel_read(_RGFW->wl_display);
 	}
 
+	wl_display_dispatch_pending(_RGFW->wl_display);
 }
 
 void RGFW_FUNC(RGFW_window_move) (RGFW_window* win, i32 x, i32 y) {

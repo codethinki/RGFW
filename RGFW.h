@@ -421,22 +421,15 @@ RGFW_STATIC_ASSERT(size16, sizeof(i16) == 2)
 #ifdef RGFW_VULKAN
 
 	#if defined(RGFW_WAYLAND) && defined(RGFW_X11)
-		#define VK_USE_PLATFORM_WAYLAND_KHR
-		#define VK_USE_PLATFORM_XLIB_KHR
 		#define RGFW_VK_SURFACE ((RGFW_usingWayland()) ? ("VK_KHR_wayland_surface") : ("VK_KHR_xlib_surface"))
 	#elif defined(RGFW_WAYLAND)
-		#define VK_USE_PLATFORM_WAYLAND_KHR
-		#define VK_USE_PLATFORM_XLIB_KHR
 		#define RGFW_VK_SURFACE "VK_KHR_wayland_surface"
 	#elif defined(RGFW_X11)
-		#define VK_USE_PLATFORM_XLIB_KHR
 		#define RGFW_VK_SURFACE "VK_KHR_xlib_surface"
 	#elif defined(RGFW_WINDOWS)
-		#define VK_USE_PLATFORM_WIN32_KHR
 		#define OEMRESOURCE
 		#define RGFW_VK_SURFACE "VK_KHR_win32_surface"
 	#elif defined(RGFW_MACOS) && !defined(RGFW_MACOS_X11)
-		#define VK_USE_PLATFORM_MACOS_MVK
 		#define RGFW_VK_SURFACE "VK_MVK_macos_surface"
 	#else
 		#define RGFW_VK_SURFACE NULL
@@ -6294,6 +6287,20 @@ RGFW_bool RGFW_copyContextPtr_EGL(RGFW_eglContext* ctx, RGFW_eglContext* newCtx)
 #ifdef RGFW_VULKAN
 #ifdef RGFW_MACOS
 #include <objc/message.h>
+#endif
+
+/* the platform types of the surface functions, the public header includes vulkan.h without a platform define */
+#ifdef RGFW_X11
+	#include <vulkan/vulkan_xlib.h>
+#endif
+#ifdef RGFW_WAYLAND
+	#include <vulkan/vulkan_wayland.h>
+#endif
+#ifdef RGFW_WINDOWS
+	#include <vulkan/vulkan_win32.h>
+#endif
+#if defined(RGFW_MACOS) && !defined(RGFW_MACOS_X11)
+	#include <vulkan/vulkan_macos.h>
 #endif
 
 RGFW_bool RGFW_loadVulkan(void) {

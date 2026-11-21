@@ -10030,6 +10030,9 @@ static void RGFW_wl_keyboard_leave(void* data, struct wl_keyboard *keyboard, u32
 	if (RGFW->kbOwner == win)
 		RGFW->kbOwner = NULL;
 
+	/* no release reaches the window after the leave, so the repeat stops here */
+	RGFW->last_key = 0;
+
 	RGFW_windowFocusCallback(win, RGFW_FALSE);
 }
 
@@ -11068,6 +11071,9 @@ void RGFW_FUNC(RGFW_pollEvents) (void) {
 	if (_RGFW->wl_repeat_info_rate != 0 && _RGFW->last_key) {
 		u32 now = (u32)(RGFW_unix_getTimeNS() / 1000000);
 		if (now > _RGFW->last_key_time) {
+			/* a repeat is a key press with repeat set, like on the other platforms, and its character */
+			RGFW_key key = RGFW_apiKeyToRGFW(_RGFW->last_key + 8);
+			RGFW_keyCallback(_RGFW->kbOwner, (u8)key, _RGFW->kbOwner->internal.mod, RGFW_TRUE, RGFW_TRUE, _RGFW->last_key_time);
 			RGFW_wl_send_key_event(_RGFW->last_key, _RGFW->last_key_time);
 			_RGFW->last_key_time = now + 1000 / (u32)_RGFW->wl_repeat_info_rate;
 		}

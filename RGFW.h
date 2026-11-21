@@ -3491,6 +3491,10 @@ struct RGFW_info {
 		i32 wl_repeat_info_rate, wl_repeat_info_delay;
 		u32 last_key_time;
 
+		float wl_axis_value[2]; /* the scroll of the current pointer frame, by wl_pointer axis */
+		i32 wl_axis_value120[2]; /* the wheel scroll of the current pointer frame, 120 per notch */
+		RGFW_bool wl_axis_pending;
+
 		RGFW_bool useWaylandBool;
     #endif
     #ifdef RGFW_WINDOWS
@@ -9895,24 +9899,52 @@ static void RGFW_wl_pointer_button(void* data, struct wl_pointer *pointer, u32 s
 	RGFW_mouseButtonCallback(win, (u8)b, RGFW_BOOL(state));
 }
 
-static void RGFW_wl_pointer_axis(void* data, struct wl_pointer *pointer, u32 time, u32 axis, wl_fixed_t value) {
-	RGFW_UNUSED(pointer); RGFW_UNUSED(time);  RGFW_UNUSED(axis);
-
+static void RGFW_wl_pointer_frame(void* data, struct wl_pointer *pointer) {
+	RGFW_UNUSED(pointer);
 	RGFW_info* RGFW = (RGFW_info*)data;
+	if (RGFW->wl_axis_pending == RGFW_FALSE) return;
+
+	/* a wheel gives notches like win32, continuous scroll (touchpad) has no notches and gives the value / 10 */
+	float scroll[2];
+	for (u32 i = 0; i < 2; i++) {
+		scroll[i] = 0.0f;
+		if (RGFW->wl_axis_value120[i] != 0) scroll[i] = -(float)RGFW->wl_axis_value120[i] / 120.0f;
+		else if (RGFW->wl_axis_value[i] != 0.0f) scroll[i] = -RGFW->wl_axis_value[i] / 10.0f;
+
+		RGFW->wl_axis_value[i] = 0.0f;
+		RGFW->wl_axis_value120[i] = 0;
+	}
+	RGFW->wl_axis_pending = RGFW_FALSE;
+
 	if (RGFW->mouseOwner == NULL) return;
-	RGFW_window* win = RGFW->mouseOwner;
+	RGFW_mouseScrollCallback(RGFW->mouseOwner, scroll[WL_POINTER_AXIS_HORIZONTAL_SCROLL], scroll[WL_POINTER_AXIS_VERTICAL_SCROLL]);
+}
 
-	float scrollX = 0.0;
-	float scrollY = 0.0;
+static void RGFW_wl_pointer_axis(void* data, struct wl_pointer *pointer, u32 time, u32 axis, wl_fixed_t value) {
+	RGFW_UNUSED(time);
+	RGFW_info* RGFW = (RGFW_info*)data;
+	if (axis > WL_POINTER_AXIS_HORIZONTAL_SCROLL) return;
 
-	if (!(win->internal.enabledEvents  & (RGFW_BIT(RGFW_mouseScroll)))) return;
+	RGFW->wl_axis_value[axis] += (float)wl_fixed_to_double(value);
+	RGFW->wl_axis_pending = RGFW_TRUE;
 
-	if (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL)
-		scrollX = (float)(-wl_fixed_to_double(value) / 10.0);
-	else if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL)
-		scrollY = (float)(-wl_fixed_to_double(value) / 10.0);
+	/* before version 5 there are no frames, the axis event is the whole scroll */
+	if (wl_pointer_get_version(pointer) < WL_POINTER_FRAME_SINCE_VERSION)
+		RGFW_wl_pointer_frame(data, pointer);
+}
 
-	RGFW_mouseScrollCallback(win, scrollX, scrollY);
+static void RGFW_wl_pointer_axis_value120(void* data, struct wl_pointer *pointer, u32 axis, i32 value120) {
+	RGFW_UNUSED(pointer);
+	RGFW_info* RGFW = (RGFW_info*)data;
+	if (axis > WL_POINTER_AXIS_HORIZONTAL_SCROLL) return;
+
+	RGFW->wl_axis_value120[axis] += value120;
+	RGFW->wl_axis_pending = RGFW_TRUE;
+}
+
+/* versions 5 to 7: one discrete step is one notch */
+static void RGFW_wl_pointer_axis_discrete(void* data, struct wl_pointer *pointer, u32 axis, i32 discrete) {
+	RGFW_wl_pointer_axis_value120(data, pointer, axis, discrete * 120);
 }
 
 
@@ -10057,6 +10089,13 @@ static void RGFW_wl_seat_capabilities(void* data, struct wl_seat *seat, u32 capa
 	pointer_listener.motion = &RGFW_wl_pointer_motion;
 	pointer_listener.button = &RGFW_wl_pointer_button;
 	pointer_listener.axis = &RGFW_wl_pointer_axis;
+	pointer_listener.frame = &RGFW_wl_pointer_frame;
+	pointer_listener.axis_source = (void (*)(void *, struct wl_pointer *, u32))&RGFW_doNothing;
+	pointer_listener.axis_stop = (void (*)(void *, struct wl_pointer *, u32, u32))&RGFW_doNothing;
+	pointer_listener.axis_discrete = &RGFW_wl_pointer_axis_discrete;
+	#ifdef WL_POINTER_AXIS_VALUE120_SINCE_VERSION
+	pointer_listener.axis_value120 = &RGFW_wl_pointer_axis_value120;
+	#endif
 
 	static struct wl_keyboard_listener keyboard_listener;
 	RGFW_MEMZERO(&keyboard_listener, sizeof(keyboard_listener));
@@ -10374,7 +10413,13 @@ static void RGFW_wl_global_registry_handler(void* data, struct wl_registry *regi
         RGFW->shm = wl_registry_bind(registry, id, &wl_shm_interface, 1);
         wl_shm_add_listener(RGFW->shm, &shm_listener, RGFW);
 	} else if (RGFW_STRNCMP(interface,"wl_seat", 8) == 0) {
-		RGFW->seat = wl_registry_bind(registry, id, &wl_seat_interface, version < 4 ? 3 : 4);
+		/* version 8: the wheel notches of wl_pointer axis_value120, older headers stop at version 7 */
+		#ifdef WL_POINTER_AXIS_VALUE120_SINCE_VERSION
+		u32 maxVersion = 8;
+		#else
+		u32 maxVersion = 7;
+		#endif
+		RGFW->seat = wl_registry_bind(registry, id, &wl_seat_interface, version < 4 ? 3 : (version < maxVersion ? version : maxVersion));
 		wl_seat_add_listener(RGFW->seat, &seat_listener, RGFW);
 	} else if (RGFW_STRNCMP(interface, zxdg_output_manager_v1_interface.name, 255) == 0) {
 		RGFW->xdg_output_manager = wl_registry_bind(registry, id, &zxdg_output_manager_v1_interface, 1);

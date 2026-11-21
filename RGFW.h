@@ -4387,6 +4387,7 @@ RGFW_window* RGFW_createWindowPtr(const char* name, i32 x, i32 y, i32 w, i32 h, 
 		_RGFW->cur = _RGFW->root;
 	} else {
 		_RGFW->cur->next = win;
+		_RGFW->cur = win;
 	}
 
 	RGFW_windowFlags reservedFlags = flags & (RGFW_windowScaleToMonitor | RGFW_windowFullscreenExclusive | RGFW_windowFullscreenBorderless);
@@ -4404,12 +4405,15 @@ RGFW_window* RGFW_createWindowPtr(const char* name, i32 x, i32 y, i32 w, i32 h, 
 	RGFW_window* ret = RGFW_createWindowPlatform(name, win->internal.flags, win);
 	if (ret == NULL) {
 		RGFW_debugCallback(RGFW_typeError, RGFW_errPlatform, "failed to create a window");
-		/* remove the window from the window list again, so it can be freed */
+		/* remove the window from the window list again, so it can be freed, it is the last window */
 		if (_RGFW->root == win) {
 			_RGFW->root = NULL;
 			_RGFW->cur = NULL;
 		} else {
-			_RGFW->cur->next = NULL;
+			RGFW_window* prev;
+			for (prev = _RGFW->root; prev->next != win; prev = prev->next);
+			prev->next = NULL;
+			_RGFW->cur = prev;
 		}
 		_RGFW->windowCount--;
 		return NULL;
@@ -4498,10 +4502,13 @@ void RGFW_window_closePtr(RGFW_window* win) {
 	if (_RGFW->root == win) {
 		_RGFW->root = win->next;
 		if (_RGFW->cur == win) _RGFW->cur = NULL;
-	} else if (_RGFW->cur == win) {
-		RGFW_window* cur;
-		for (cur = _RGFW->root; cur->next && cur->next != win; cur = cur->next);
-		_RGFW->cur = cur;
+	} else {
+		RGFW_window* prev;
+		for (prev = _RGFW->root; prev != NULL && prev->next != win; prev = prev->next);
+		if (prev != NULL) {
+			prev->next = win->next;
+			if (_RGFW->cur == win) _RGFW->cur = prev;
+		}
 	}
 
 	if (_RGFW->clipboard != NULL)
@@ -5710,7 +5717,7 @@ RGFW_window* RGFW_getCurrentWindow_OpenGL(void) {
 	void* ctx = RGFW_getCurrentContext_OpenGL();
 	void* surf = RGFW_getCurrentSurface_OpenGL();
 
-	for (RGFW_window* win = _RGFW->root; win->next; win = win->next) {
+	for (RGFW_window* win = _RGFW->root; win != NULL; win = win->next) {
 		RGFW_glContext* winGlCtx = RGFW_window_getContext_OpenGL(win);
 		if (winGlCtx == NULL) continue;
 
@@ -6276,7 +6283,7 @@ RGFW_window* RGFW_getCurrentWindow_EGL(void) {
 	void* ctx = RGFW_getCurrentContext_EGL();
 	void* surf = RGFW_getCurrentSurface_EGL();
 
-	for (RGFW_window* win = _RGFW->root; win->next; win = win->next) {
+	for (RGFW_window* win = _RGFW->root; win != NULL; win = win->next) {
 		RGFW_eglContext* winGlCtx = RGFW_window_getContext_EGL(win);
 		if (winGlCtx == NULL) continue;
 

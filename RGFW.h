@@ -4302,6 +4302,7 @@ i32 RGFW_init_ptr(const char* className, RGFW_initFlags flags, RGFW_info* info) 
 
 		if (RGFW_loadGL() == RGFW_FALSE) {
 			RGFW_debugCallback(RGFW_typeError, RGFW_errFailedFuncLoad, "Failed to load the OpenGL library");
+			RGFW_deinit_ptr(info);
 			return -1;
 		}
 	}
@@ -4309,6 +4310,7 @@ i32 RGFW_init_ptr(const char* className, RGFW_initFlags flags, RGFW_info* info) 
 	if (flags & RGFW_initVulkan) {
 		if (RGFW_loadVulkan() == RGFW_FALSE) {
 			RGFW_debugCallback(RGFW_typeError, RGFW_errFailedFuncLoad, "Failed to load the Vulkan library");
+			RGFW_deinit_ptr(info);
 			return -1;
 		}
 	}
@@ -4316,6 +4318,7 @@ i32 RGFW_init_ptr(const char* className, RGFW_initFlags flags, RGFW_info* info) 
 	if (flags & RGFW_initEGL) {
 		if (RGFW_loadEGL() == RGFW_FALSE) {
 			RGFW_debugCallback(RGFW_typeError, RGFW_errFailedFuncLoad, "Failed to load the EGL library");
+			RGFW_deinit_ptr(info);
 			return -1;
 		}
 	}
@@ -4341,6 +4344,7 @@ void RGFW_deinit_ptr(RGFW_info* info) {
 
 	RGFW_unloadEGL();
 	RGFW_unloadGL();
+	RGFW_unloadVulkan();
 
     _RGFW->root = NULL;
 	_RGFW->cur = NULL;
@@ -6375,6 +6379,19 @@ void RGFW_unloadVulkan(void) {
 	#endif /* OSX doesn't need it's handle freed */
 
     _RGFW->vulkan_handle = NULL;
+	_RGFW->vkGetInstanceProcAddress = NULL;
+	#if defined(RGFW_X11)
+		_RGFW->vkCreateXlibSurfaceKHR = NULL;
+		_RGFW->vkGetPhysicalDeviceXlibPresentationSupportKHR = NULL;
+	#endif
+	#ifdef RGFW_WAYLAND
+		_RGFW->vkCreateWaylandSurfaceKHR = NULL;
+		_RGFW->vkGetPhysicalDeviceWaylandPresentationSupportKHR = NULL;
+	#endif
+	#ifdef RGFW_WINDOWS
+		_RGFW->vkCreateWin32SurfaceKHR = NULL;
+		_RGFW->vkGetPhysicalDeviceWin32PresentationSupportKHR = NULL;
+	#endif
 }
 
 RGFW_proc RGFW_getInstanceProcAddress_Vulkan(VkInstance instance, const char* procname) {

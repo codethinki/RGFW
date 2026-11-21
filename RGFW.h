@@ -2944,6 +2944,15 @@ RGFWDEF u32 RGFW_rgfwToApiKey(RGFW_key keycode);
 */
 RGFWDEF RGFW_key RGFW_physicalToMappedKey(RGFW_key keycode);
 
+/**!
+ * @brief Gets the character that a physical RGFW keycode gives in the current keyboard layout, without modifiers.
+ * @param keycode the physical RGFW keycode.
+ * @return The unicode codepoint of the character, 0 if the key gives none.
+ * @note letters are lowercase, a dead key gives its spacing character (e.g. '^'), Enter, Tab, Backspace, Escape and Delete give '\r', '\t', '\b', '\x1B' and '\x7F'
+ * @note X11, macOS and WASM return 0 for now
+*/
+RGFWDEF u32 RGFW_physicalToKeyChar(RGFW_key keycode);
+
 /** @} */
 #endif /* RGFW_HEADER */
 
@@ -3715,7 +3724,7 @@ void RGFW_initKeycodes(void) {
 	RGFW_MEMZERO(_RGFW->keycodes, sizeof(_RGFW->keycodes));
 	RGFW_initKeycodesPlatform();
 	size_t i, y;
-    for (i = RGFW_keySpace; i < RGFW_keyCount; i++) {
+    for (i = RGFW_keyNULL + 1; i < RGFW_keyCount; i++) {
         for (y = 0; y < (sizeof(_RGFW->keycodes) / sizeof(RGFW_key)); y++) {
             if (_RGFW->keycodes[y] == i) {
                 _RGFW->apiKeycodes[i] = (u32)y;
@@ -7628,6 +7637,11 @@ RGFW_key RGFW_FUNC(RGFW_physicalToMappedKey) (RGFW_key key) {
     return RGFW_keyNULL;
 }
 
+u32 RGFW_FUNC(RGFW_physicalToKeyChar) (RGFW_key key) {
+	RGFW_UNUSED(key);
+	return 0; /* TODO */
+}
+
 RGFWDEF void RGFW_XHandleEvent(void);
 void RGFW_XHandleEvent(void) {
 	static float deltaX = 0.0f;
@@ -10971,6 +10985,35 @@ RGFW_key RGFW_FUNC(RGFW_physicalToMappedKey)(RGFW_key key) {
     return RGFW_keyNULL;
 }
 
+u32 RGFW_FUNC(RGFW_physicalToKeyChar) (RGFW_key key) {
+	if (_RGFW->xkb_state == NULL || _RGFW->keymap == NULL) return 0;
+
+	xkb_keycode_t keycode = (xkb_keycode_t)RGFW_rgfwToApiKey(key);
+	xkb_layout_index_t layout = xkb_state_serialize_layout(_RGFW->xkb_state, XKB_STATE_LAYOUT_EFFECTIVE);
+
+	/* level 0 is the key without modifiers */
+	const xkb_keysym_t* syms;
+	if (xkb_keymap_key_get_syms_by_level(_RGFW->keymap, keycode, layout, 0, &syms) < 1) return 0;
+
+	/* dead keys have no codepoint, give their spacing character like the other platforms */
+	switch (syms[0]) {
+		case XKB_KEY_dead_grave: return 0x60;
+		case XKB_KEY_dead_acute: return 0xB4;
+		case XKB_KEY_dead_circumflex: return 0x5E;
+		case XKB_KEY_dead_tilde: return 0x7E;
+		case XKB_KEY_dead_macron: return 0xAF;
+		case XKB_KEY_dead_breve: return 0x2D8;
+		case XKB_KEY_dead_abovedot: return 0x2D9;
+		case XKB_KEY_dead_diaeresis: return 0xA8;
+		case XKB_KEY_dead_abovering: return 0x2DA;
+		case XKB_KEY_dead_doubleacute: return 0x2DD;
+		case XKB_KEY_dead_caron: return 0x2C7;
+		case XKB_KEY_dead_cedilla: return 0xB8;
+		case XKB_KEY_dead_ogonek: return 0x2DB;
+		default: return xkb_keysym_to_utf32(syms[0]);
+	}
+}
+
 RGFW_bool RGFW_FUNC(RGFW_window_fetchSize) (RGFW_window* win, i32* w, i32* h) {
 	return RGFW_window_getSize(win, w, h);
 }
@@ -12694,6 +12737,35 @@ RGFW_key RGFW_physicalToMappedKey(RGFW_key key) {
 	}
 
 	return RGFW_keyNULL;
+}
+
+u32 RGFW_physicalToKeyChar(RGFW_key key) {
+	/* Delete gives no character on win32, the other platforms give DEL */
+	if (key == RGFW_keyDelete) return 0x7F;
+
+	UINT vsc = RGFW_rgfwToApiKey(key);
+	if (vsc == 0) return 0;
+	/* RGFW keeps the extended bit as 0x100, MapVirtualKeyEx wants the 0xE0 prefix */
+	if (vsc & 0x100) vsc = 0xE000 | (vsc & 0xFF);
+
+	HKL layout = GetKeyboardLayout(0);
+	UINT vk = MapVirtualKeyExW(vsc, MAPVK_VSC_TO_VK_EX, layout);
+	if (vk == 0) return 0;
+
+	/* no modifiers; 0x4 keeps the keyboard state (Windows 10 1607+), so dead keys keep working */
+	BYTE keyboardState[256];
+	RGFW_MEMZERO(&keyboardState, sizeof(keyboardState));
+
+	wchar_t charBuffer[8] = {0};
+	int result = ToUnicodeEx(vk, vsc & 0xFF, keyboardState, charBuffer, 8, 0x4, layout);
+
+	/* -1: a dead key, the buffer holds its spacing character */
+	if (result == 0) return 0;
+
+	if (result >= 2 && charBuffer[0] >= 0xD800 && charBuffer[0] <= 0xDBFF && charBuffer[1] >= 0xDC00 && charBuffer[1] <= 0xDFFF)
+		return 0x10000 + (((u32)charBuffer[0] - 0xD800) << 10) + ((u32)charBuffer[1] - 0xDC00);
+
+	return (u32)charBuffer[0];
 }
 
 RGFW_bool RGFW_window_fetchSize(RGFW_window* win, i32* w, i32* h) {
@@ -15180,6 +15252,11 @@ RGFW_key RGFW_physicalToMappedKey(RGFW_key key) {
 	return key;
 }
 
+u32 RGFW_physicalToKeyChar(RGFW_key key) {
+	RGFW_UNUSED(key);
+	return 0; /* TODO */
+}
+
 RGFW_bool RGFW_window_fetchSize(RGFW_window* win, i32* w, i32* h) {
 	NSRect content = ((NSRect(*)(id, SEL))abi_objc_msgSend_stret)((id)win->src.view, sel_registerName("frame"));
 
@@ -16647,6 +16724,11 @@ RGFW_key RGFW_physicalToMappedKey(RGFW_key key) {
 	return key;
 }
 
+u32 RGFW_physicalToKeyChar(RGFW_key key) {
+	RGFW_UNUSED(key);
+	return 0; /* TODO */
+}
+
 RGFW_bool RGFW_window_fetchSize(RGFW_window* win, i32* w, i32* h) {
 	return RGFW_window_getSize(win, w, h);
 }
@@ -17113,6 +17195,7 @@ void RGFW_waitForEvent(i32 waitMS) { RGFW_UNUSED(waitMS); }
 typedef RGFW_window* (*RGFW_createWindowPlatform_ptr)(const char* name, RGFW_windowFlags flags, RGFW_window* win);
 typedef RGFW_bool (*RGFW_getMouse_ptr)(i32* x, i32* y);
 typedef RGFW_key (*RGFW_physicalToMappedKey_ptr)(RGFW_key key);
+typedef u32 (*RGFW_physicalToKeyChar_ptr)(RGFW_key key);
 typedef void (*RGFW_pollEvents_ptr)(void);
 typedef RGFW_bool (*RGFW_window_fetchSize_ptr)(RGFW_window* win, i32* w, i32* h);
 typedef void (*RGFW_pollMonitors_ptr)(void);
@@ -17192,6 +17275,7 @@ typedef struct RGFW_FunctionPointers {
     RGFW_createWindowPlatform_ptr createWindowPlatform;
     RGFW_getMouse_ptr getGlobalMouse;
 	RGFW_physicalToMappedKey_ptr physicalToMappedKey;
+	RGFW_physicalToKeyChar_ptr physicalToKeyChar;
     RGFW_window_fetchSize_ptr window_fetchSize;
 	RGFW_pollEvents_ptr pollEvents;
     RGFW_pollMonitors_ptr pollMonitors;
@@ -17264,6 +17348,7 @@ void RGFW_window_setRawMouseModePlatform(RGFW_window* win, RGFW_bool state) { RG
 RGFW_window* RGFW_createWindowPlatform(const char* name, RGFW_windowFlags flags, RGFW_window* win) { return RGFW_api.createWindowPlatform(name, flags, win); }
 RGFW_bool RGFW_getGlobalMouse(i32* x, i32* y) { return RGFW_api.getGlobalMouse(x, y); }
 RGFW_key RGFW_physicalToMappedKey(RGFW_key key) { return RGFW_api.physicalToMappedKey(key); }
+u32 RGFW_physicalToKeyChar(RGFW_key key) { return RGFW_api.physicalToKeyChar(key); }
 void RGFW_pollEvents(void) { RGFW_api.pollEvents(); }
 RGFW_bool RGFW_window_fetchSize(RGFW_window* win, i32* w, i32* h) { return RGFW_api.window_fetchSize(win, w, h); }
 void RGFW_pollMonitors(void) { RGFW_api.pollMonitors(); }
@@ -17349,6 +17434,7 @@ void RGFW_load_X11(void) {
 	RGFW_api.createWindowPlatform = RGFW_createWindowPlatform_X11;
     RGFW_api.getGlobalMouse = RGFW_getGlobalMouse_X11;
     RGFW_api.physicalToMappedKey = RGFW_physicalToMappedKey_X11;
+    RGFW_api.physicalToKeyChar = RGFW_physicalToKeyChar_X11;
     RGFW_api.pollEvents = RGFW_pollEvents_X11;
     RGFW_api.window_fetchSize = RGFW_window_fetchSize_X11;
     RGFW_api.pollMonitors = RGFW_pollMonitors_X11;
@@ -17391,6 +17477,7 @@ void RGFW_load_X11(void) {
     RGFW_api.createWindowPlatform = RGFW_createWindowPlatform_Wayland;
     RGFW_api.getGlobalMouse = RGFW_getGlobalMouse_Wayland;
     RGFW_api.physicalToMappedKey = RGFW_physicalToMappedKey_Wayland;
+    RGFW_api.physicalToKeyChar = RGFW_physicalToKeyChar_Wayland;
     RGFW_api.pollEvents = RGFW_pollEvents_Wayland;
     RGFW_api.window_fetchSize = RGFW_window_fetchSize_Wayland;
     RGFW_api.pollMonitors = RGFW_pollMonitors_Wayland;

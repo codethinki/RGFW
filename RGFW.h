@@ -6807,6 +6807,7 @@ void RGFW_initKeycodesPlatform(void) {
     _RGFW->keycodes[202] = RGFW_keyF24;
     _RGFW->keycodes[203] = RGFW_keyF25;
 	_RGFW->keycodes[142] = RGFW_keyPadEqual;
+	_RGFW->keycodes[94] = RGFW_keyWorld1; /* the ISO key between the left shift and Z (KEY_102ND), like win32 */
 	_RGFW->keycodes[161] = RGFW_keyWorld1; /* non-US key #1 */
     _RGFW->keycodes[162] = RGFW_keyWorld2; /* non-US key #2 */
 	_RGFW->keycodes[135] = RGFW_keyMenu;

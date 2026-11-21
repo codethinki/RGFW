@@ -69,8 +69,14 @@ jobs:
         mkdir lib
         cd ../../../RGFW
 
+    - name: tests
+      run: |
+        make run_tests
+
     - name: test C++
       run: |
+        make
+        make clean
         make CC=g++
       if: matrix.bits == 64 && matrix.compiler == 'mingw-w64'
 

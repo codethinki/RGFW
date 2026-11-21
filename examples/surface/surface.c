@@ -48,39 +48,53 @@ static void drawRect(u8* buffer, i32 bufferWidth, i32 x, i32 y, i32 w, i32 h, u8
 }
 
 int main(void) {
+    RGFW_init("Basic buffer example", 0);
     RGFW_window* win = RGFW_createWindow("Basic buffer example", 0, 0, 500, 500, RGFW_windowCenter | RGFW_windowTransparent);
-    RGFW_window_setExitKey(win, RGFW_escape);
+    RGFW_window_setExitKey(win, RGFW_keyEscape);
 
-    RGFW_monitor mon = RGFW_window_getMonitor(win);
-    #ifdef RGFW_WAYLAND
-        mon.mode.w = 500;
-        mon.mode.h = 500;
-    #endif
+    RGFW_monitor* mon = RGFW_window_getMonitor(win);
+	i32 width = 500;
+	i32 height = 500;
 
-    u8* buffer = (u8*)RGFW_ALLOC((u32)(mon.mode.w * mon.mode.h * 4));
-    RGFW_surface* surface = RGFW_createSurface(buffer, mon.mode.w, mon.mode.h, RGFW_formatRGBA8);
+	if (mon) {
+		width = (i32)((float)mon->mode.w * mon->pixelRatio);
+		height = (i32)((float)mon->mode.h * mon->pixelRatio);
+	}
 
-    i8 running = 1;
+	u8* buffer = (u8*)RGFW_ALLOC((u32)(width * height * 4));
+	RGFW_surface* surface = RGFW_createSurface(buffer, width, height, RGFW_formatRGBA8);
 
-    RGFW_event event;
+	float theta = 0;
+//	float theta2 = 0;
 
-    while (running) {
-        while (RGFW_window_checkEvent(win, &event)) {
-            if (event.type == RGFW_quit || RGFW_window_isKeyPressed(win, RGFW_escape)) {
-                running = 0;
-                break;
-            }
-        }
+    while (RGFW_window_shouldClose(win) == RGFW_FALSE) {
+		RGFW_pollEvents();
 
         u8 color[4] = {0, 0, 255, 125};
         u8 color2[4] = {255, 0, 0, 255};
+        u8 color3[4] = {0, 255, 0, 255};
 
         i32 w, h;
         RGFW_window_getSize(win, &w, &h);
-        clear(buffer, mon.mode.w, w, h, color);
-        drawRect(buffer, mon.mode.w, 200, 200, 200, 200, color2);
+        clear(buffer, width, w, h, color);
+        drawRect(buffer, width, 200, 200, 200, 200, color2);
 
-        drawBitmap(buffer, mon.mode.w, icon, 100, 100, 3, 3);
+		for (i32 x = 200; x < 400; x++) {
+			theta = theta + (((float)x - 200) / 10.0f);
+
+			float t = cosf(theta * ((3.14f) / 180.0f));
+			i32 y = 300 + (i32)(t * 60.0f);
+			if (y < 0) continue;
+			if (y >= h) break;
+
+			for (float i = -8; i < 8; i++) {
+				y = 300 + (i32)(t * (60.0f + i));
+				u32 index = (u32)y * (4 * (u32)width) + ((u32)x) * 4;
+				memcpy(&buffer[index], color3, 4 * sizeof(u8));
+			}
+		}
+
+        drawBitmap(buffer, width, icon, 100, 100, 3, 3);
         RGFW_window_blitSurface(win, surface);
 	}
 
@@ -88,4 +102,5 @@ int main(void) {
 	RGFW_FREE(buffer);
 
     RGFW_window_close(win);
+    RGFW_deinit();
 }

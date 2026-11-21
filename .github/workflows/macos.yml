@@ -53,11 +53,16 @@ jobs:
         cd ../..
     # Generating static + shared library, note that i386 architecture is deprecated
     # Defining GL_SILENCE_DEPRECATION because OpenGL is deprecated on macOS
+    - name: tests
+      run: |
+        make run_tests
+
     - name: Build Library
       run: |
         clang --version
 
-
+        make
+        make clean
         make examples CFLAGS="-x objective-c++ -Wc++11-narrowing" CC=g++
         make CC="zig cc"
         make clean

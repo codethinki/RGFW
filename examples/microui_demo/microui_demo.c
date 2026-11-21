@@ -1,11 +1,14 @@
-#undef _WIN32_WINNT
-#include <stdio.h>
+#ifdef _MSC_VER
+	#pragma comment(lib, "opengl32")
+#endif
 
 #define RGFW_DEBUG
 #define GL_SILENCE_DEPRECATION
 #define RGFW_OPENGL
 #define RGFW_IMPLEMENTATION
 #include "RGFW.h"
+
+#include <stdio.h>
 
 #ifdef RGFW_MACOS
 #include <OpenGL/gl.h>
@@ -226,14 +229,14 @@ static const char button_map[256] = {
 };
 
 static const char key_map[256] = {
-  [ RGFW_shiftL       & 0xff ] = MU_KEY_SHIFT,
-  [ RGFW_shiftR       & 0xff ] = MU_KEY_SHIFT,
-  [ RGFW_controlL        & 0xff ] = MU_KEY_CTRL,
-  [ RGFW_controlR        & 0xff ] = MU_KEY_CTRL,
-  [ RGFW_altL         & 0xff ] = MU_KEY_ALT,
-  [ RGFW_altR         & 0xff ] = MU_KEY_ALT,
-  [ RGFW_return       & 0xff ] = MU_KEY_RETURN,
-  [ RGFW_backSpace    & 0xff ] = MU_KEY_BACKSPACE,
+  [ RGFW_keyShiftL       & 0xff ] = MU_KEY_SHIFT,
+  [ RGFW_keyShiftR       & 0xff ] = MU_KEY_SHIFT,
+  [ RGFW_keyControlL        & 0xff ] = MU_KEY_CTRL,
+  [ RGFW_keyControlR        & 0xff ] = MU_KEY_CTRL,
+  [ RGFW_keyAltL         & 0xff ] = MU_KEY_ALT,
+  [ RGFW_keyAltR         & 0xff ] = MU_KEY_ALT,
+  [ RGFW_keyReturn       & 0xff ] = MU_KEY_RETURN,
+  [ RGFW_keyBackSpace    & 0xff ] = MU_KEY_BACKSPACE,
 };
 
 
@@ -257,16 +260,18 @@ static void update_viewport(int width, int height) {
 
 int main(int argc, char **argv) {
   RGFW_UNUSED(argc); RGFW_UNUSED(argv);
+  RGFW_init("microui_demo", RGFW_initOpenGL);
+
   /* init RGFW window */
   RGFW_window* window = RGFW_createWindow("", 0, 0, width, height, RGFW_windowCenter |  RGFW_windowOpenGL);
 
-  RGFW_monitor mon = RGFW_window_getMonitor(window);
+  RGFW_monitor* mon = RGFW_window_getMonitor(window);
   width = window->w;
   height = window->h;
-  pixelRatio = mon.pixelRatio;
+  pixelRatio = mon->pixelRatio;
 
   r_init();
-  RGFW_window_setExitKey(window, RGFW_escape);
+  RGFW_window_setExitKey(window, RGFW_keyEscape);
 
   /* init microui */
   mu_Context *ctx = (mu_Context*)malloc(sizeof(mu_Context));
@@ -280,14 +285,14 @@ int main(int argc, char **argv) {
     /* handle RGFW events */
     RGFW_event event;
     while (RGFW_window_checkEvent(window, &event)) {
-      if (event.type == RGFW_quit) break;
+      if (event.type == RGFW_windowClose) break;
 
       switch (event.type) {
-        case RGFW_quit: break;
-        case RGFW_mousePosChanged: mu_input_mousemove(ctx, event.mouse.x,  event.mouse.y); break;
+        case RGFW_windowClose: break;
+        case RGFW_mouseMotion: mu_input_mousemove(ctx, event.mouse.x,  event.mouse.y); break;
 
 		case RGFW_mouseScroll:
-			mu_input_scroll(ctx, event.scroll.x, event.scroll.y);
+			mu_input_scroll(ctx, event.delta.x, event.delta.y);
 			break;
         case RGFW_mouseButtonPressed: {
 		  i32 x, y;
@@ -305,14 +310,19 @@ int main(int argc, char **argv) {
           break;
         }
 
-        case RGFW_keyPressed: {
-		  char str[2] = {(char)event.key.sym, '\0'};
-		  mu_input_text(ctx, str);
+        case RGFW_keyChar: {
+		  u32 str[2] = {(char)event.keyChar.value, '\0'};
+		  mu_input_text(ctx, (char*)str);
+		  break;
 	    }
+		case RGFW_keyPressed: {
+			int c = key_map[event.key.value & 0xff];
+			if (c) mu_input_keydown(ctx, c);
+			break;
+		}
 		case RGFW_keyReleased: {
-          int c = key_map[event.key.value & 0xff];
-          if (c && event.type == RGFW_keyPressed) { mu_input_keydown(ctx, c); }
-          if (c && event.type == RGFW_keyReleased) { mu_input_keyup(ctx, c);   }
+			int c = key_map[event.key.value & 0xff];
+			if (c) mu_input_keyup(ctx, c);
           break;
         }
 
@@ -343,6 +353,7 @@ int main(int argc, char **argv) {
     RGFW_window_swapBuffers_OpenGL(window);
   }
 
+  RGFW_deinit();
   return 0;
 }
 

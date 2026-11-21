@@ -7,7 +7,11 @@
 
 #define RGFW_DEBUG
 #define GL_SILENCE_DEPRECATION
-#define RGFW_OPENGL
+#ifdef __EMSCRIPTEN__
+	#define RGFW_OPENGL
+#else
+	#define RGFW_EGL
+#endif
 #define RGFW_IMPLEMENTATION
 #include "RGFW.h"
 
@@ -29,15 +33,40 @@ GLuint load_shader(const char *shaderSource, GLenum type) {
     return shader;
 }
 
-int main(void) {
+RGFW_window* win;
+void loop(void) {
+	RGFW_event event;
+	RGFW_window_checkEvent(win, &event);
+
+	glClear(GL_COLOR_BUFFER_BIT);
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	#ifndef RGFW_WASM
+		RGFW_window_swapBuffers_EGL(win);
+	#else
+		RGFW_window_swapBuffers_OpenGL(win);
+	#endif
+}
+
+int main(void) { 
+    RGFW_init("gles2", RGFW_initEGL);
+    
     RGFW_glHints* hints = RGFW_getGlobalHints_OpenGL();
     hints->major = 2;
     hints->minor = 0;
-    hints->profile = RGFW_glES;
+	hints->profile = RGFW_glES;
     RGFW_setGlobalHints_OpenGL(hints);
 
-	RGFW_window* win = RGFW_createWindow("name", 0, 0, 500, 500, RGFW_windowCenter | RGFW_windowTransparent | RGFW_windowOpenGL);
-    RGFW_window_setExitKey(win, RGFW_escape);
+	RGFW_windowFlags flags =  RGFW_windowCenter ;
+	#ifdef RGFW_WASM
+		flags |= RGFW_windowOpenGL;
+	#else
+		flags |= RGFW_windowEGL;
+	#endif
+
+	win = RGFW_createWindow("name", 0, 0, 500, 500, RGFW_windowCenter | RGFW_windowTransparent | flags);
+    RGFW_window_setExitKey(win, RGFW_keyEscape);
 
     ///////  the openGL part  ///////////////////////////////////////////////////////////////
 
@@ -87,7 +116,10 @@ int main(void) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
 
-    glViewport(0, 0, 500, 500);
+	i32 w, h;
+	RGFW_window_getSizeInPixels(win, &w, &h);
+
+    glViewport(0, 0, w, h);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
     float attribute_array[] =
@@ -99,7 +131,7 @@ int main(void) {
         };
 
     size_t attribute_stride = 5 * sizeof(float);
-    float display_aspect = ((float) win->w) / ((float) win->h);
+    float display_aspect = ((float) w) / ((float) h);
     float xscale = 1.5 / display_aspect;
     float yscale = 1.5;
     float display_transform_cols[4*4] =
@@ -121,17 +153,15 @@ int main(void) {
     glEnableVertexAttribArray(position_loc);
     glEnableVertexAttribArray(color_loc);
 
-
+	#ifndef __EMSCRIPTEN__
     while (!RGFW_window_shouldClose(win)) {
-        RGFW_event event;
-        RGFW_window_checkEvent(win, &event);
-
-        glClear(GL_COLOR_BUFFER_BIT);
-        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-
-		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-        RGFW_window_swapBuffers_OpenGL(win);
+		loop();
     }
+	#else
+		emscripten_set_main_loop(loop, 0, 1);
+	#endif
 
     RGFW_window_close(win);
+
+    RGFW_deinit();
 }

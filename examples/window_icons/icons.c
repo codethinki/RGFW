@@ -8,9 +8,10 @@
 u8 base_icon[4 * 3 * 3] = {0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF};
 
 int main(void) {
+    RGFW_init("icons", 0);
     int w, h, c;
     RGFW_window* win = RGFW_createWindow("RGFW icons", 0, 0, 600, 400, RGFW_windowCenter | RGFW_windowNoResize);
-    RGFW_window_setExitKey(win, RGFW_escape);
+    RGFW_window_setExitKey(win, RGFW_keyEscape);
 
     unsigned char* icon = stbi_load("logo.png", &w, &h, &c, 3);
     RGFW_window_setIconEx(win, base_icon, 3, 3, RGFW_formatRGBA8, RGFW_iconWindow);
@@ -23,5 +24,7 @@ int main(void) {
 
     RGFW_window_close(win);
     stbi_image_free(icon);
+
+    RGFW_deinit();
     return 0;
 }

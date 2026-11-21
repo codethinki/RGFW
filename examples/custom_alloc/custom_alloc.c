@@ -27,9 +27,10 @@ void myFree(void* ptr, unsigned int line, const char* file) {
 #include "RGFW.h"
 
 int main(void) {
-	RGFW_setClassName("RGFW Example");
-	RGFW_window *win = RGFW_createWindow("RGFW Example Window", 500, 500, 500, 500, RGFW_windowCenter | RGFW_windowAllowDND);
-    RGFW_window_setExitKey(win, RGFW_escape);
+	RGFW_init("RGFW Example", 0);
+
+    RGFW_window *win = RGFW_createWindow("RGFW Example Window", 500, 500, 500, 500, RGFW_windowCenter | RGFW_windowAllowDND);
+    RGFW_window_setExitKey(win, RGFW_keyEscape);
 
 	while (!RGFW_window_shouldClose(win)) {
 		RGFW_pollEvents();
@@ -37,6 +38,7 @@ int main(void) {
 
 	RGFW_window_close(win);
 
+    RGFW_deinit();
     if (counter > 0) printf("MEMORY LEAK!\n");
     return 0;
 }

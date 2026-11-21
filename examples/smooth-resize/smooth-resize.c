@@ -1,3 +1,7 @@
+#ifdef _MSC_VER
+	#pragma comment(lib, "opengl32")
+#endif
+
 #define RGFW_DEBUG
 #define GL_SILENCE_DEPRECATION
 #define RGFW_OPENGL
@@ -29,27 +33,33 @@ void draw(RGFW_window* win) {
     RGFW_window_swapBuffers_OpenGL(win);
 }
 
-void resize(RGFW_window* win, i32 w, i32 h);
-void refresh(RGFW_window* win);
+void resize(const RGFW_event* e);
+void refresh(const RGFW_event* e);
 
-void resize(RGFW_window* win, i32 w, i32 h) { RGFW_UNUSED(win); glViewport(0, 0, w, h); }
-void refresh(RGFW_window* win) { printf("refresh\n"); RGFW_UNUSED(win); draw(win); }
+void resize(const RGFW_event* e) {
+	RGFW_monitor* mon = RGFW_window_getMonitor(e->common.win);
+	glViewport(0, 0, (i32)((float)e->update.w * mon->pixelRatio), (i32)((float)e->update.h * mon->pixelRatio));
+}
+void refresh(const RGFW_event* e) { RGFW_UNUSED(e); printf("refresh\n"); }
 
 int main(void) {
+    RGFW_init("smooth-resize", RGFW_initOpenGL);
+
     RGFW_window* win = RGFW_createWindow("a window", 0, 0, 300, 100, RGFW_windowCenter | RGFW_windowOpenGL);
-    RGFW_window_setExitKey(win, RGFW_escape);
-    RGFW_setWindowRefreshCallback(refresh);
-    RGFW_setWindowResizedCallback(resize);
+    RGFW_window_setExitKey(win, RGFW_keyEscape);
+    RGFW_setEventCallback(RGFW_windowRefresh, refresh);
+    RGFW_setEventCallback(RGFW_windowResized, resize);
 
     RGFW_event event;
     while (RGFW_window_shouldClose(win) == RGFW_FALSE) {
         while (RGFW_window_checkEvent(win, &event)) {
-            if (event.type == RGFW_quit)  break;
+            if (event.type == RGFW_windowClose)  break;
         }
 
         draw(win);
     }
 
     RGFW_window_close(win);
+    RGFW_deinit();
     return 0;
 }

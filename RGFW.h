@@ -446,18 +446,6 @@ RGFW_STATIC_ASSERT(size16, sizeof(i16) == 2)
 		#include <vulkan/vulkan.h>
 	#endif
 
-	#if defined(RGFW_X11)
-		typedef VkResult (VKAPI_PTR *RGFW_vkCreateXlibSurfaceKHRProc)(VkInstance, const VkXlibSurfaceCreateInfoKHR*, const VkAllocationCallbacks*, VkSurfaceKHR*);
-		typedef VkBool32 (VKAPI_PTR *RGFW_vkGetPhysicalDeviceXlibPresentationSupportKHRProc)(VkPhysicalDevice, uint32_t, Display*, VisualID);
-	#endif
-	#ifdef RGFW_WAYLAND
-		typedef VkResult (VKAPI_PTR *RGFW_vkCreateWaylandSurfaceKHRProc)(VkInstance, const VkWaylandSurfaceCreateInfoKHR*, const VkAllocationCallbacks*, VkSurfaceKHR*);
-		typedef VkBool32 (VKAPI_PTR *RGFW_vkGetPhysicalDeviceWaylandPresentationSupportKHRProc)(VkPhysicalDevice, uint32_t, struct wl_display*);
-	#endif
-	#ifdef RGFW_WINDOWS
-		typedef VkResult (VKAPI_PTR *RGFW_vkCreateWin32SurfaceKHRProc)(VkInstance, const VkWin32SurfaceCreateInfoKHR*, const VkAllocationCallbacks*, VkSurfaceKHR*);
-		typedef VkBool32 (VKAPI_PTR *RGFW_vkGetPhysicalDeviceWin32PresentationSupportKHRProc)(VkPhysicalDevice, uint32_t);
-	#endif
 #endif
 
 /*! @brief Flags for RGFW initialization */
@@ -3529,19 +3517,6 @@ struct RGFW_info {
 	#ifdef RGFW_VULKAN
 		void* vulkan_handle;
 		RGFW_proc (*vkGetInstanceProcAddress)(void*, const char*);
-		#if defined(RGFW_X11)
-			RGFW_vkCreateXlibSurfaceKHRProc vkCreateXlibSurfaceKHR;
-			RGFW_vkGetPhysicalDeviceXlibPresentationSupportKHRProc vkGetPhysicalDeviceXlibPresentationSupportKHR;
-		#endif
-		#ifdef RGFW_WAYLAND
-			RGFW_vkCreateWaylandSurfaceKHRProc vkCreateWaylandSurfaceKHR;
-			RGFW_vkGetPhysicalDeviceWaylandPresentationSupportKHRProc vkGetPhysicalDeviceWaylandPresentationSupportKHR;
-		#endif
-
-		#ifdef RGFW_WINDOWS
-			RGFW_vkCreateWin32SurfaceKHRProc vkCreateWin32SurfaceKHR;
-			RGFW_vkGetPhysicalDeviceWin32PresentationSupportKHRProc vkGetPhysicalDeviceWin32PresentationSupportKHR;
-		#endif
 	#endif
 
 	RGFW_bool rawMouse; /* global raw mouse toggle */
@@ -6364,7 +6339,21 @@ RGFW_bool RGFW_loadVulkan(void) {
 	return RGFW_TRUE;
 }
 
-#define RGFW_LOAD_VK(func) if (_RGFW->func == NULL) _RGFW->func = (RGFW_##func##Proc)RGFW_getInstanceProcAddress_Vulkan(instance, #func); RGFW_ASSERT(_RGFW->func);
+#if defined(RGFW_X11)
+	typedef VkResult (VKAPI_PTR *RGFW_vkCreateXlibSurfaceKHRProc)(VkInstance, const VkXlibSurfaceCreateInfoKHR*, const VkAllocationCallbacks*, VkSurfaceKHR*);
+	typedef VkBool32 (VKAPI_PTR *RGFW_vkGetPhysicalDeviceXlibPresentationSupportKHRProc)(VkPhysicalDevice, uint32_t, Display*, VisualID);
+#endif
+#ifdef RGFW_WAYLAND
+	typedef VkResult (VKAPI_PTR *RGFW_vkCreateWaylandSurfaceKHRProc)(VkInstance, const VkWaylandSurfaceCreateInfoKHR*, const VkAllocationCallbacks*, VkSurfaceKHR*);
+	typedef VkBool32 (VKAPI_PTR *RGFW_vkGetPhysicalDeviceWaylandPresentationSupportKHRProc)(VkPhysicalDevice, uint32_t, struct wl_display*);
+#endif
+#ifdef RGFW_WINDOWS
+	typedef VkResult (VKAPI_PTR *RGFW_vkCreateWin32SurfaceKHRProc)(VkInstance, const VkWin32SurfaceCreateInfoKHR*, const VkAllocationCallbacks*, VkSurfaceKHR*);
+	typedef VkBool32 (VKAPI_PTR *RGFW_vkGetPhysicalDeviceWin32PresentationSupportKHRProc)(VkPhysicalDevice, uint32_t);
+#endif
+
+/* the function of the instance: a function is only valid for the instance it was loaded with */
+#define RGFW_LOAD_VK(func) RGFW_##func##Proc RGFW_##func = (RGFW_##func##Proc)RGFW_getInstanceProcAddress_Vulkan(instance, #func); RGFW_ASSERT(RGFW_##func);
 
 void RGFW_unloadVulkan(void) {
 	if (!_RGFW->vulkan_handle) return;
@@ -6399,16 +6388,16 @@ VkResult RGFW_window_createSurface_Vulkan(RGFW_window* win, VkInstance instance,
 #ifdef RGFW_X11
 	RGFW_LOAD_VK(vkCreateXlibSurfaceKHR);
     VkXlibSurfaceCreateInfoKHR x11 = { VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR, 0, 0, (Display*) _RGFW->display, (Window) win->src.window };
-    return _RGFW->vkCreateXlibSurfaceKHR(instance, &x11, NULL, surface);
+    return RGFW_vkCreateXlibSurfaceKHR(instance, &x11, NULL, surface);
 #endif
 #if defined(RGFW_WAYLAND)
     RGFW_LOAD_VK(vkCreateWaylandSurfaceKHR);
     VkWaylandSurfaceCreateInfoKHR wayland = { VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR, 0, 0, (struct wl_display*) _RGFW->wl_display, (struct wl_surface*) win->src.surface };
-    return _RGFW->vkCreateWaylandSurfaceKHR(instance, &wayland, NULL, surface);
+    return RGFW_vkCreateWaylandSurfaceKHR(instance, &wayland, NULL, surface);
 #elif defined(RGFW_WINDOWS)
     RGFW_LOAD_VK(vkCreateWin32SurfaceKHR);
     VkWin32SurfaceCreateInfoKHR win32 = { VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR, 0, 0, _RGFW->instance, (HWND)win->src.window };
-    return _RGFW->vkCreateWin32SurfaceKHR(instance, &win32, NULL, surface);
+    return RGFW_vkCreateWin32SurfaceKHR(instance, &win32, NULL, surface);
 #endif
 }
 #endif
@@ -6419,16 +6408,16 @@ RGFW_bool RGFW_getPhysicalDevicePresentationSupport_Vulkan(VkInstance instance, 
 #ifdef RGFW_X11
 	RGFW_LOAD_VK(vkGetPhysicalDeviceXlibPresentationSupportKHR);
 	Visual* visual = DefaultVisual(_RGFW->display, DefaultScreen(_RGFW->display));
-    RGFW_bool out = _RGFW->vkGetPhysicalDeviceXlibPresentationSupportKHR(physicalDevice, queueFamilyIndex, _RGFW->display, XVisualIDFromVisual(visual));
+    RGFW_bool out = RGFW_vkGetPhysicalDeviceXlibPresentationSupportKHR(physicalDevice, queueFamilyIndex, _RGFW->display, XVisualIDFromVisual(visual));
     return out;
 #endif
 #if defined(RGFW_WAYLAND)
     RGFW_LOAD_VK(vkGetPhysicalDeviceWaylandPresentationSupportKHR);
-    RGFW_bool wlout = _RGFW->vkGetPhysicalDeviceWaylandPresentationSupportKHR(physicalDevice, queueFamilyIndex, _RGFW->wl_display);
+    RGFW_bool wlout = RGFW_vkGetPhysicalDeviceWaylandPresentationSupportKHR(physicalDevice, queueFamilyIndex, _RGFW->wl_display);
     return wlout;
 #elif defined(RGFW_WINDOWS)
 	RGFW_LOAD_VK(vkGetPhysicalDeviceWin32PresentationSupportKHR);
-	RGFW_bool out = _RGFW->vkGetPhysicalDeviceWin32PresentationSupportKHR(physicalDevice, queueFamilyIndex);
+	RGFW_bool out = RGFW_vkGetPhysicalDeviceWin32PresentationSupportKHR(physicalDevice, queueFamilyIndex);
 	return out;
 #elif defined(RGFW_MACOS) && !defined(RGFW_MACOS_X11)
 	RGFW_UNUSED(physicalDevice);

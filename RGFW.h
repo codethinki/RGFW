@@ -3715,7 +3715,7 @@ void RGFW_initKeycodes(void) {
 	RGFW_MEMZERO(_RGFW->keycodes, sizeof(_RGFW->keycodes));
 	RGFW_initKeycodesPlatform();
 	size_t i, y;
-    for (i = RGFW_keySpace; i < RGFW_keyCount; i++) {
+    for (i = RGFW_keyNULL + 1; i < RGFW_keyCount; i++) {
         for (y = 0; y < (sizeof(_RGFW->keycodes) / sizeof(RGFW_key)); y++) {
             if (_RGFW->keycodes[y] == i) {
                 _RGFW->apiKeycodes[i] = (u32)y;
@@ -6778,6 +6778,7 @@ void RGFW_initKeycodesPlatform(void) {
     _RGFW->keycodes[202] = RGFW_keyF24;
     _RGFW->keycodes[203] = RGFW_keyF25;
 	_RGFW->keycodes[142] = RGFW_keyPadEqual;
+	_RGFW->keycodes[94] = RGFW_keyWorld1; /* the ISO key between the left shift and Z (KEY_102ND), like win32 */
 	_RGFW->keycodes[161] = RGFW_keyWorld1; /* non-US key #1 */
     _RGFW->keycodes[162] = RGFW_keyWorld2; /* non-US key #2 */
 	_RGFW->keycodes[135] = RGFW_keyMenu;

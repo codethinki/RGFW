@@ -4384,16 +4384,6 @@ RGFW_window* RGFW_createWindowPtr(const char* name, i32 x, i32 y, i32 w, i32 h, 
 #endif
 
 	RGFW_MEMZERO(win, sizeof(RGFW_window));
-	_RGFW->windowCount++;
-
-	/* rect based the requested flags */
-	if (_RGFW->root == NULL) {
-		RGFW_setRootWindow(win);
-		_RGFW->cur = _RGFW->root;
-	} else {
-		_RGFW->cur->next = win;
-		_RGFW->cur = win;
-	}
 
 	RGFW_windowFlags reservedFlags = flags & (RGFW_windowScaleToMonitor | RGFW_windowFullscreenExclusive | RGFW_windowFullscreenBorderless);
 
@@ -4410,18 +4400,17 @@ RGFW_window* RGFW_createWindowPtr(const char* name, i32 x, i32 y, i32 w, i32 h, 
 	RGFW_window* ret = RGFW_createWindowPlatform(name, win->internal.flags, win);
 	if (ret == NULL) {
 		RGFW_debugCallback(RGFW_typeError, RGFW_errPlatform, "failed to create a window");
-		/* remove the window from the window list again, so it can be freed, it is the last window */
-		if (_RGFW->root == win) {
-			_RGFW->root = NULL;
-			_RGFW->cur = NULL;
-		} else {
-			RGFW_window* prev;
-			for (prev = _RGFW->root; prev->next != win; prev = prev->next);
-			prev->next = NULL;
-			_RGFW->cur = prev;
-		}
-		_RGFW->windowCount--;
 		return NULL;
+	}
+
+	/* the window list only holds created windows */
+	_RGFW->windowCount++;
+	if (_RGFW->root == NULL) {
+		RGFW_setRootWindow(win);
+		_RGFW->cur = _RGFW->root;
+	} else {
+		_RGFW->cur->next = win;
+		_RGFW->cur = win;
 	}
 
 #ifdef RGFW_OPENGL
